@@ -1,0 +1,85 @@
+# Input data configuration
+input:
+  dataframe_path: "/data-fast/data3/common/halo/original_models_data_gov/eec/combined_dataset.xlsx"
+  text_column: "comment"
+
+# Reference corpus configuration
+reference:
+  dataframe_path: "/data-fast/data3/common/halo/applications/data_from_data_gov/extraction_dg/all_data_gov_wo_qa.csv"
+  text_column: "text"
+  min_length: 50
+  max_length: 1000
+
+# LLM processor configuration
+processor:
+  gpu_list: [0,1,2,3,4,5,6,7]
+  llm: "NEMO"  # will be mapped to actual NEMO object
+  gpu_memory_utilization: 0.5
+  max_model_len: 8192
+  multiplicity: 1
+
+# Pipeline configuration
+pipeline:
+  batch_size: 25
+
+# Quality control
+# Quality control
+quality:
+  min_semantic_similarity: 0.70  # Can be higher with better model
+  enable_validation: false
+  similarity_model: "sentence-transformers/all-mpnet-base-v2"  # Better model
+
+# Output configuration
+output:
+  output_folder: "/data-fast/data3/common/halo/original_models_data_gov/eec/eda_augmented_dataset/"
+  save_intermediate: true
+
+# Augmentation rounds
+rounds:
+  # Round 1: Base transformations
+  - name: "round_1_base"
+    apply_to: ["original"]
+    operations:
+      - type: "style_rewrite"
+        count: 3
+      - type: "paraphrase"
+        count: 2
+      - type: "formality_shift"
+        count: 1
+        params:
+          direction: "more casual"
+
+  # Round 2: Lexical variations
+  - name: "round_2_lexical"
+    apply_to: ["original", "round_1_base"]
+    operations:
+      - type: "synonym_replace"
+        count: 2
+      - type: "sentence_restructure"
+        count: 1
+
+  # Round 3: Noise injection
+  - name: "round_3_noise"
+    apply_to: ["round_1_base", "round_2_lexical"]
+    operations:
+      - type: "noise_injection"
+        count: 2
+
+  # Round 4: Cross-pollination (using round 2 as style references)
+  - name: "round_4_cross"
+    apply_to: ["original"]
+    operations:
+      - type: "style_rewrite"
+        count: 2
+        params:
+          reference_pool: "round_2_lexical"
+
+  # Round 5: Compound operations
+  - name: "round_5_compound"
+    apply_to: ["original", "round_4_cross"]
+    operations:
+      - type: "compound"
+        count: 1
+        sequences:
+          - ["paraphrase", "noise_injection"]
+          - ["synonym_replace", "sentence_restructure"]

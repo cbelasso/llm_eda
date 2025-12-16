@@ -1,0 +1,15 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+*.csv
+*.json
+*.xlsx
+*.pkl
+*.envrc
+
+# Virtual environments
+.venv
