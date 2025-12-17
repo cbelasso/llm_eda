@@ -1,9 +1,10 @@
+import argparse
 from pathlib import Path
 
 from llm_parallelization.new_processor import NEMO, NewProcessor
 import yaml
 
-from eda_pipeline import EDAPipeline, load_dataframe
+from eda_pipeline_optimized import EDAPipelineOptimized, load_dataframe
 
 # Model mapping
 MODEL_MAPPING = {
@@ -29,10 +30,21 @@ def load_config(config_path: str = "config.yaml") -> dict:
     return config
 
 
-def main(config_path: str = "config.yaml"):
+def main(config_path: str = "config.yaml", resume: bool = True, clear_checkpoint: bool = False):
     # Load config
     print(f"📋 Loading config from: {config_path}")
     config = load_config(config_path)
+
+    # Setup checkpoint directory
+    output_folder = config.get("output", {}).get("output_folder", "./output")
+    checkpoint_dir = Path(output_folder) / "checkpoints"
+
+    # Clear checkpoint if requested
+    if clear_checkpoint and checkpoint_dir.exists():
+        import shutil
+
+        print(f"🧹 Clearing existing checkpoint at {checkpoint_dir}")
+        shutil.rmtree(checkpoint_dir)
 
     # Load data
     print("📂 Loading input data...")
@@ -50,6 +62,7 @@ def main(config_path: str = "config.yaml"):
 
     print(f"✅ Loaded {len(input_df)} input texts")
     print(f"✅ Loaded {len(reference_df)} reference texts")
+    print(f"📋 Input columns: {list(input_df.columns)}")
 
     quality_config = config.get("quality", {})
     min_similarity = quality_config.get("min_semantic_similarity", 0.65)
@@ -59,13 +72,14 @@ def main(config_path: str = "config.yaml"):
     processor = NewProcessor(**config["processor"])
 
     try:
-        # Initialize pipeline
-        pipeline = EDAPipeline(
+        # Initialize optimized pipeline with checkpointing
+        pipeline = EDAPipelineOptimized(
             processor=processor,
             reference_df=reference_df,
             reference_text_col=config["reference"]["text_column"],
-            min_semantic_similarity=min_similarity,  # Adjust threshold
-            enable_validation=enable_validation,  # Enable quality checks
+            min_semantic_similarity=min_similarity,
+            enable_validation=enable_validation,
+            checkpoint_dir=str(checkpoint_dir),
         )
 
         # Run pipeline
@@ -73,29 +87,45 @@ def main(config_path: str = "config.yaml"):
             input_df=input_df,
             config=config,
             text_column=config["input"]["text_column"],
+            resume=resume,
         )
 
         # Save final output
-        output_path = Path(config["output"]["output_folder"]) / "final_augmented_dataset.csv"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_df.to_csv(output_path, index=False)
+        output_path = Path(output_folder) / "final_augmented_dataset.csv"
+        if not output_path.exists() or len(output_df) > 0:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_df.to_csv(output_path, index=False)
 
         print(f"\n🎉 Final dataset saved to: {output_path}")
         print(f"📊 Total texts: {len(output_df)}")
         print(f"📈 Augmentation multiplier: {len(output_df) / len(input_df):.1f}x")
-
-        # Print round statistics
-        print("\n📊 Round Statistics:")
-        for round_name, texts in pipeline.all_texts.items():
-            print(f"  {round_name}: {len(texts)} texts")
+        print(f"📋 Output columns: {list(output_df.columns)}")
 
     finally:
         processor.terminate()
 
 
 if __name__ == "__main__":
-    import sys
+    parser = argparse.ArgumentParser(description="Run EDA augmentation pipeline")
+    parser.add_argument(
+        "config",
+        nargs="?",
+        default="config.yaml",
+        help="Path to config file (default: config.yaml)",
+    )
+    parser.add_argument(
+        "--no-resume", action="store_true", help="Start fresh, don't resume from checkpoint"
+    )
+    parser.add_argument(
+        "--clear-checkpoint",
+        action="store_true",
+        help="Clear existing checkpoint before starting",
+    )
 
-    # Allow specifying config path as command line argument
-    config_path = sys.argv[1] if len(sys.argv) > 1 else "config.yaml"
-    main(config_path)
+    args = parser.parse_args()
+
+    main(
+        config_path=args.config,
+        resume=not args.no_resume,
+        clear_checkpoint=args.clear_checkpoint,
+    )

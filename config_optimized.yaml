@@ -2,6 +2,7 @@
 input:
   dataframe_path: "/data-fast/data3/common/halo/original_models_data_gov/eec/combined_dataset.xlsx"
   text_column: "comment"
+  # All other columns (datum_id, question, annotations, type_data) are automatically preserved
 
 # Reference corpus configuration
 reference:
@@ -12,27 +13,29 @@ reference:
 
 # LLM processor configuration
 processor:
-  gpu_list: [0,1,2,3,4,5,6,7]
-  llm: "NEMO"  # will be mapped to actual NEMO object
-  gpu_memory_utilization: 0.5
+  gpu_list: [7]
+  llm: "NEMO"
+  gpu_memory_utilization: 0.9
   max_model_len: 8192
   multiplicity: 1
 
 # Pipeline configuration
 pipeline:
   batch_size: 25
+  chunk_size: 10000        # Process input dataframe in chunks of this size
+  prompt_batch_size: 2000  # Process prompts in batches of this size before LLM call
 
 # Quality control
-# Quality control
 quality:
-  min_semantic_similarity: 0.70  # Can be higher with better model
+  min_semantic_similarity: 0.70
   enable_validation: false
-  similarity_model: "sentence-transformers/all-mpnet-base-v2"  # Better model
+  similarity_model: "sentence-transformers/all-mpnet-base-v2"
 
 # Output configuration
 output:
   output_folder: "/data-fast/data3/common/halo/original_models_data_gov/eec/eda_augmented_dataset/"
   save_intermediate: true
+  # Checkpoints are saved automatically to: {output_folder}/checkpoints/
 
 # Augmentation rounds
 rounds:
